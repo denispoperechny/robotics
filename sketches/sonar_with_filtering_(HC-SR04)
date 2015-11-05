@@ -1,5 +1,7 @@
 const uint8_t trigPin = 4;
 const uint8_t echoPin = 2;
+const uint8_t valueUpdateDelay = 25;
+const uint8_t displayValueDelay = 250;
 
 class IValueProvider
 {
@@ -18,6 +20,8 @@ class SonarReader : public IValueProvider
         {
             _trigPin = trigPin;
             _echoPin = echoPin;
+            pinMode(_trigPin, OUTPUT);
+            pinMode(_echoPin, INPUT);
         }
         virtual float GetValue()
         {
@@ -26,7 +30,7 @@ class SonarReader : public IValueProvider
            
             // The sensor is triggered by a HIGH pulse of 10 or more microseconds.
             // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
-            pinMode(_trigPin, OUTPUT);
+            
             digitalWrite(_trigPin, LOW);
             delayMicroseconds(3);
           
@@ -38,7 +42,6 @@ class SonarReader : public IValueProvider
             // Read the signal from the sensor: a HIGH pulse whose
             // duration is the time (in microseconds) from the sending
             // of the ping to the reception of its echo off of an object.
-            pinMode(_echoPin, INPUT);
             duration = pulseIn(_echoPin, HIGH);
            
             // convert the time into a distance
@@ -93,7 +96,7 @@ int displaySkip = 0;
 
 void loop()
 {
-      if(displaySkip == 10){
+      if(displaySkip >= displayValueDelay / valueUpdateDelay){
           displaySkip = 0;
           Serial.print((int)(_filter->GetValue()));
           Serial.print(" centimeters");
@@ -101,6 +104,6 @@ void loop()
       }
       
       _filter->ForceUpdate();
-      delay(25);
+      delay(valueUpdateDelay);
       displaySkip ++;
 }
