@@ -1,0 +1,106 @@
+const uint8_t trigPin = 4;
+const uint8_t echoPin = 2;
+
+class IValueProvider
+{
+    public:
+        virtual ~IValueProvider() {}
+        virtual float GetValue() = 0;
+};
+
+class SonarReader : public IValueProvider
+{
+    private:
+        uint8_t _trigPin = 0;
+        uint8_t _echoPin = 0;
+    public:
+        SonarReader(uint8_t trigPin, uint8_t echoPin)
+        {
+            _trigPin = trigPin;
+            _echoPin = echoPin;
+        }
+        virtual float GetValue()
+        {
+            uint32_t duration; // duration of the round trip
+            uint32_t cm;        // distance of the obstacle
+           
+            // The sensor is triggered by a HIGH pulse of 10 or more microseconds.
+            // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+            pinMode(_trigPin, OUTPUT);
+            digitalWrite(_trigPin, LOW);
+            delayMicroseconds(3);
+          
+            // Start trigger signal
+            digitalWrite(_trigPin, HIGH);
+            delayMicroseconds(10);
+            digitalWrite(_trigPin, LOW);
+           
+            // Read the signal from the sensor: a HIGH pulse whose
+            // duration is the time (in microseconds) from the sending
+            // of the ping to the reception of its echo off of an object.
+            pinMode(_echoPin, INPUT);
+            duration = pulseIn(_echoPin, HIGH);
+           
+            // convert the time into a distance
+            cm = (uint32_t)((duration<<4)+duration)/1000.0; // cm = 17 * duration/1000
+            return cm;
+        }
+};
+
+class ValueFilter : public IValueProvider
+{
+    private:
+        uint8_t _filterSteps = 0;
+        IValueProvider * _valueProvider;
+        bool _initiation = 1;
+        float _avarage = 0;
+        void updateValue()
+        {
+            if (_initiation == 1)
+            {
+                _avarage = _valueProvider->GetValue();
+                _initiation = 0;
+            }
+            _avarage = (_avarage * ((float)(_filterSteps - 1)) + _valueProvider->GetValue()) / (float)_filterSteps;
+        }
+    public:
+        ValueFilter(IValueProvider * valueProvider, uint8_t filterSteps)
+        {
+            _filterSteps = filterSteps;
+            _valueProvider = valueProvider;
+        }
+        virtual float GetValue()
+        {
+            updateValue();
+            return _avarage;
+        }
+        virtual void ForceUpdate()
+        {
+            updateValue();
+        }
+};
+
+SonarReader *_sonar;
+ValueFilter *_filter;
+ 
+void setup() {
+  Serial.begin(9600);
+  _sonar = new SonarReader(trigPin, echoPin);
+  _filter = new ValueFilter(_sonar, 5);
+}
+
+int displaySkip = 0;
+
+void loop()
+{
+      if(displaySkip == 10){
+          displaySkip = 0;
+          Serial.print((int)(_filter->GetValue()));
+          Serial.print(" centimeters");
+          Serial.println();
+      }
+      
+      _filter->ForceUpdate();
+      delay(25);
+      displaySkip ++;
+}
