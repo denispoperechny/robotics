@@ -1,18 +1,15 @@
 
 // TODO: RENAME STATES IDS DEFINITIONS
-// TODO: Add interruptions?
 
 
 #define DEBUG false
 
-#define RESET_PIN_PEREPHERIALS 2 // writes
-#define DISABLE_PIN 3 // reads
-#define IS_ACTIVE_STATUS_PIN 4 // writes
+#define RESET_PIN_PEREPHERIALS 6 // writes
+#define DISABLE_PIN 4 // reads
+#define IS_ACTIVE_STATUS_PIN 5 // writes
 
-#define SENSOR_PIN_1 5 // reads
-#define SENSOR_PIN_2 6 // reads
-#define SENSOR_PIN_3 7 // reads
-#define SENSOR_PIN_4 8 // reads
+#define SENSOR_PIN_1 2 // reads
+#define SENSOR_PIN_2 3 // reads
 
 #define ALARM_PIN 9 // writes
 
@@ -27,8 +24,29 @@
 
 #define alarmActiveSeconds 30
 #define resetDelayMillis 1000
-#define loopDelay 25
+#define loopDelay 100
 
+#define interruptsCacheLen 5
+bool _catchedInterruptions[interruptsCacheLen];
+void prepareInterruptions()
+{
+  for (int i=0; i<interruptsCacheLen; i++)
+  {
+    _catchedInterruptions[i] = false;
+  }
+  
+  attachInterrupt(digitalPinToInterrupt(SENSOR_PIN_1), sensor1Cb, RISING);
+  attachInterrupt(digitalPinToInterrupt(SENSOR_PIN_2), sensor2Cb, RISING);
+}
+
+void sensor1Cb()
+{
+  _catchedInterruptions[SENSOR_PIN_1] = true;
+}
+void sensor2Cb()
+{
+  _catchedInterruptions[SENSOR_PIN_2] = true;
+}
 
 class SafeInputReader
 {
@@ -52,9 +70,9 @@ public:
   bool IsInputSwitched()
   {
     int readResult = digitalRead(_pinToRead);
-    //bool interruptCaught = _catchedInterruptions[_pinToRead];
-    bool result = readResult == _signalValue;// || interruptCaught;
-    //_catchedInterruptions[_pinToRead] = false;
+    bool interruptCaught = _catchedInterruptions[_pinToRead];
+    bool result = readResult == _signalValue || interruptCaught;
+    _catchedInterruptions[_pinToRead] = false;
 
     return result;
   }
@@ -67,8 +85,6 @@ private:
   {
     pinMode(SENSOR_PIN_1, INPUT);
     pinMode(SENSOR_PIN_2, INPUT);
-    pinMode(SENSOR_PIN_3, INPUT);
-    pinMode(SENSOR_PIN_4, INPUT);
     
     pinMode(RED_LIGHT_PIN, OUTPUT);
     pinMode(GREEN_LIGHT_PIN, OUTPUT);
@@ -83,20 +99,17 @@ private:
 //    digitalWrite(DISABLE_PIN, LOW);
 //    digitalWrite(SENSOR_PIN_1, LOW);
 //    digitalWrite(SENSOR_PIN_2, LOW);
-//    digitalWrite(SENSOR_PIN_3, LOW);
-//    digitalWrite(SENSOR_PIN_4, LOW);
   }
 public:
   Hardware()
   {
     SetupPins();
+    prepareInterruptions();
   
     DisableInput = new SafeInputReader(DISABLE_PIN);//, HIGH);
 
     TrackedInput1 = new SafeInputReader(SENSOR_PIN_1);//, HIGH);
     TrackedInput2 = new SafeInputReader(SENSOR_PIN_2);//, HIGH);
-    TrackedInput3 = new SafeInputReader(SENSOR_PIN_3);//, HIGH);
-    TrackedInput4 = new SafeInputReader(SENSOR_PIN_4);//, HIGH);
   }
 
   void SetDefaultState()
@@ -112,8 +125,6 @@ public:
 
   SafeInputReader * TrackedInput1;
   SafeInputReader * TrackedInput2;
-  SafeInputReader * TrackedInput3;
-  SafeInputReader * TrackedInput4;
 
   void SetAlarmValue(int value)
   {
@@ -173,9 +184,7 @@ public:
 
     // temporary workaround
     if (_hardware->TrackedInput1->IsInputSwitched()
-      || _hardware->TrackedInput2->IsInputSwitched()
-      || _hardware->TrackedInput3->IsInputSwitched()
-      || _hardware->TrackedInput4->IsInputSwitched())
+      || _hardware->TrackedInput2->IsInputSwitched())
     {
       // do nothing
       // this resets all fires detected by interruptions
@@ -197,9 +206,7 @@ public:
     }
 
     if (_hardware->TrackedInput1->IsInputSwitched()
-      || _hardware->TrackedInput2->IsInputSwitched()
-      || _hardware->TrackedInput3->IsInputSwitched()
-      || _hardware->TrackedInput4->IsInputSwitched())
+      || _hardware->TrackedInput2->IsInputSwitched())
     {
       return alarmId;
     }
@@ -317,9 +324,7 @@ public:
     }
 
     if (_hardware->TrackedInput1->IsInputSwitched()
-      || _hardware->TrackedInput2->IsInputSwitched()
-      || _hardware->TrackedInput3->IsInputSwitched()
-      || _hardware->TrackedInput4->IsInputSwitched())
+      || _hardware->TrackedInput2->IsInputSwitched())
     {
       startTime = millis();
       return alarmId;
