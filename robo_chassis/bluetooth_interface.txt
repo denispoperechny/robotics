@@ -1,0 +1,6 @@
+Device Name:
+rchs01
+
+Command example:
+0.7|1|500||0.7|1|500
+(pwr_a|direction_a|duration_a||pwr_b|direction_b|duration_b)
