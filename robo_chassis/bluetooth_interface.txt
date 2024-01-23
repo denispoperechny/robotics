@@ -1,3 +1,6 @@
+BLE Profile:
+Nordic BLE UART
+
 Device Name:
 rchs01
 
