@@ -90,9 +90,8 @@ button_a = PButton(16)
 # create testing PWM
 p12 = Pin(12)
 pwm12 = PWM(p12)
-pwm12.freq(50)
-# pwm12.duty(512)
-pwm12.duty(900)
+pwm12.freq(100)
+pwm12.duty(int(1023 * .75))
 
 
 state = {
@@ -243,10 +242,15 @@ def process_reading(tick_ms):
         else:
             frequency_1 = 0
 
-        # display.set_state(str("RX: Duty " + "{:.1f}".format(duty) + " %"), str("Freq. " + "{:.1f}".format(frequency) + " Hz"))
-        display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty_1 * 100) + "%"), str("{:.1f}".format(hv_1) + "V" + "  " + "{:.1f}".format(frequency_1) + "Hz"))
-        # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), "High: " + str("{:.1f}".format(hv) + "V"))
-        # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), str(r_count))
+        if hv_1 >= 1:
+            # display.set_state(str("RX: Duty " + "{:.1f}".format(duty) + " %"), str("Freq. " + "{:.1f}".format(frequency) + " Hz"))
+            # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), "High: " + str("{:.1f}".format(hv) + "V"))
+            # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), str(r_count))
+            display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty_1 * 100) + "%"), str("{:.1f}".format(hv_1) + "V" + "  " + "{:.1f}".format(frequency_1) + "Hz"))
+        else:
+            display.set_state("RX_  Low", "{:.1f}".format(hv_1) + "V")
+
+
 
         state["reading"]["window_start_ts"] = time.ticks_ms()
         state["reading"]["pwm_reader"] = PwmReader(frequency_ref_volt=hv_1 / 2)
