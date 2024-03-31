@@ -2,6 +2,7 @@
 # https://pypi.org/project/micropython-i2c-lcd/
 # https://github.com/brainelectronics/micropython-i2c-lcd/tree/main/lcd_i2c
 
+# ampy --port COM5 run main.py
 
 from lcd_i2c import LCD
 from machine import I2C, Pin, ADC, PWM
@@ -32,8 +33,7 @@ class PDisplay:
         self.line_a = ""
         self.line_b = ""
 
-    def update(self):
-        # self.lcd.clear()
+    def _update(self):
         self.lcd.cursor_position = (0, 0)
         self.lcd.print(self.line_a + " " * self.NUM_COLS)
         self.lcd.cursor_position = (0, 1)
@@ -42,6 +42,8 @@ class PDisplay:
     def set_state(self, line_a, line_b):
         self.line_a = line_a
         self.line_b = line_b
+
+        self._update()
 
 
 class PButton:
@@ -141,7 +143,7 @@ def process_serial_sampling(tick_ms):
         return
 
     start_delay = 1000
-    sample_duration = 200
+    sample_duration = 500
 
     if tick_ms - state["sampling"]["window_start_ts"] < start_delay:
         return
@@ -155,6 +157,7 @@ def process_serial_sampling(tick_ms):
             print(str(state["sampling"]["timestamps"][i]) + "|" + "{:.2f}".format(r))
 
         state["sampling"]["completed"] = True
+
         display.set_state(str("Completed"), str(""))
 
 
@@ -172,12 +175,15 @@ def process_reading(tick_ms):
     state["reading"]["timestamps"].append(tick_ms)
     state["reading"]["readings"].append(val_b)
 
-    w_duration = 1000
+    w_duration = 500
     if tick_ms - state["reading"]["window_start_ts"] > w_duration:
         readings = state["reading"]["readings"]
         sorted_readings = list(readings)
         sorted_readings.sort()
-        v_threshold = sorted_readings[-1] / 5
+        hv = sorted_readings[int(len(sorted_readings) * 0.9)]
+        v_threshold = hv / 2
+        if v_threshold < 1:
+            v_threshold = 1
 
         r_count = len(readings)
         h_r_count = 0
@@ -192,19 +198,18 @@ def process_reading(tick_ms):
         duty = (h_r_count / r_count) * 100
         frequency = j_count / (w_duration / 1000)
 
-        readings.sort()
-        hv = readings[int(len(readings) * 0.9)]
-
         # display.set_state(str("RX: Duty " + "{:.1f}".format(duty) + " %"), str("Freq. " + "{:.1f}".format(frequency) + " Hz"))
         display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), str("{:.1f}".format(hv) + "V" + "  " + "{:.1f}".format(frequency) + "Hz"))
+        # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), "High: " + str("{:.1f}".format(hv) + "V"))
+        # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), str(r_count))
 
-        state["reading"]["window_start_ts"] = tick_ms
+        state["reading"]["window_start_ts"] = time.ticks_ms()
         state["reading"]["timestamps"] = []
         state["reading"]["readings"] = []
 
 
 modes = {
-    MODE_DEMO: process_demo,
+    # MODE_DEMO: process_demo,
     MODE_READING: process_reading,
     MODE_SERIAL_SAMPLING: process_serial_sampling
 }
@@ -214,23 +219,19 @@ cycle_count = 0
 while True:
     tick_ms = time.ticks_ms()
 
-    if cycle_count % 30 == 0:
+    if cycle_count % 50 == 0:
         button_a.update()
 
     # is_pressed = button_a.is_pressed()
     # lp_duration = button_a.get_long_press_duration()
-    clicked = button_a.check_click_once()
 
-    if clicked:
+    if button_a.check_click_once():
         idx = list(modes.keys()).index(current_mode)
         mode_keys = list(modes.keys()) * 2
         current_mode = mode_keys[idx + 1]
         state["modeChanged"] = True
 
     modes[current_mode](tick_ms)
-
-    if cycle_count % 300 == 0:
-        display.update()
 
     cycle_count += 1
     if cycle_count == 100000:
