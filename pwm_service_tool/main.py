@@ -100,8 +100,7 @@ state = {
     "demo_test": 0.0,
     "reading": {
         "window_start_ts": 0,
-        "timestamps": [],
-        "readings": []
+        "pwm_reader": None
     },
     "sampling": {
         "window_start_ts": 0,
@@ -161,6 +160,68 @@ def process_serial_sampling(tick_ms):
         display.set_state(str("Completed"), str(""))
 
 
+class PwmReader:
+    def __init__(self, frequency_ref_volt=None):
+        # print(frequency_ref_volt)
+        self.buckets = {}
+        self.frequency_ref_volt = frequency_ref_volt
+        self.prev_v_val = None
+        self.new_high_ct = 0
+
+    def add_v_value(self, v_value):
+        if v_value < 0:
+            v_value = 0.0
+
+        bucket_val = self._get_voltage_bucket_val(v_value)
+        if bucket_val not in self.buckets.keys():
+            self.buckets[bucket_val] = 0
+        self.buckets[bucket_val] += 1
+
+        if self.frequency_ref_volt is not None and self.prev_v_val is not None:
+            if self.prev_v_val < self.frequency_ref_volt and v_value >= self.frequency_ref_volt:
+                self.new_high_ct += 1
+
+        self.prev_v_val = v_value
+
+    def _get_voltage_bucket_val(self, v_reading):
+        int_val = int(v_reading * 10)
+        if int_val % 2 != 0:
+            int_val = int_val - 1
+
+        return int_val
+
+    def get_stats(self):
+        duty = 0.0
+        high_v = 0.0
+        frequency = None
+
+        num_readings = sum(self.buckets.values())
+
+        # calc high_v
+        high_v_i = int(num_readings * 0.9)
+        bucket_ixs = list(self.buckets.keys())
+        bucket_ixs.sort(reverse=True)
+        for i in bucket_ixs:
+            high_v_i += self.buckets[i]
+            if high_v_i >= num_readings:
+                high_v = float(i) / 10
+                break
+
+        # calc duty
+        high_ct = 0
+        duty_threshold = self._get_voltage_bucket_val(high_v / 2)
+        for i in self.buckets.keys():
+            if i > duty_threshold:
+                high_ct += self.buckets[i]
+        duty = high_ct / num_readings
+
+        # calc frequency
+        if self.frequency_ref_volt:
+            frequency = self.new_high_ct
+
+        return duty, high_v, frequency
+
+
 def process_reading(tick_ms):
     init = state["modeChanged"]
     state["modeChanged"] = False
@@ -168,44 +229,27 @@ def process_reading(tick_ms):
     if init:
         display.set_state(str("RX_ ..."), str(""))
         state["reading"]["window_start_ts"] = tick_ms
-        state["reading"]["timestamps"] = []
-        state["reading"]["readings"] = []
+        state["reading"]["pwm_reader"] = PwmReader(frequency_ref_volt=None)
 
     val_b = get_v_reading()
-    state["reading"]["timestamps"].append(tick_ms)
-    state["reading"]["readings"].append(val_b)
+    state["reading"]["pwm_reader"].add_v_value(val_b)
 
-    w_duration = 500
+    w_duration = 1500
     if tick_ms - state["reading"]["window_start_ts"] > w_duration:
-        readings = state["reading"]["readings"]
-        sorted_readings = list(readings)
-        sorted_readings.sort()
-        hv = sorted_readings[int(len(sorted_readings) * 0.9)]
-        v_threshold = hv / 2
-        if v_threshold < 1:
-            v_threshold = 1
 
-        r_count = len(readings)
-        h_r_count = 0
-        j_count = 0
-        for i, r in enumerate(readings):
-            if r > v_threshold:
-                h_r_count += 1
-
-                if i > 0 and readings[i -1] <= v_threshold:
-                    j_count += 1
-
-        duty = (h_r_count / r_count) * 100
-        frequency = j_count / (w_duration / 1000)
+        duty_1, hv_1, frequency_1 = state["reading"]["pwm_reader"].get_stats()
+        if frequency_1 is not None:
+            frequency_1 = frequency_1 / (w_duration / 1000)
+        else:
+            frequency_1 = 0
 
         # display.set_state(str("RX: Duty " + "{:.1f}".format(duty) + " %"), str("Freq. " + "{:.1f}".format(frequency) + " Hz"))
-        display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), str("{:.1f}".format(hv) + "V" + "  " + "{:.1f}".format(frequency) + "Hz"))
+        display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty_1 * 100) + "%"), str("{:.1f}".format(hv_1) + "V" + "  " + "{:.1f}".format(frequency_1) + "Hz"))
         # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), "High: " + str("{:.1f}".format(hv) + "V"))
         # display.set_state(str("RX_ Duty: " + "{:.1f}".format(duty) + "%"), str(r_count))
 
         state["reading"]["window_start_ts"] = time.ticks_ms()
-        state["reading"]["timestamps"] = []
-        state["reading"]["readings"] = []
+        state["reading"]["pwm_reader"] = PwmReader(frequency_ref_volt=hv_1 / 2)
 
 
 modes = {
