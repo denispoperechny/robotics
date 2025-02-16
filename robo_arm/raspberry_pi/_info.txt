@@ -1,0 +1,19 @@
+
+# Code-Server
+PASSWORD="password" /usr/bin/code-server --bind-addr 0.0.0.0:8080
+
+# mosquitto
+sudo apt install mosquitto mosquitto-clients
+sudo systemctl start mosquitto
+sudo systemctl enable mosquitto
+sudo systemctl status mosquitto
+
+# VENV
+sudo apt install python3-venv
+python -m venv venv
+source ./venv/bin/activate
+
+# UART
+ls -al /dev/ | grep ttyUSB
+sudo apt install screen -y
+screen /dev/ttyUSB0 115200
